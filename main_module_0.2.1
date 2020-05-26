@@ -1,0 +1,243 @@
+list pri_owner;
+list sec_owner;
+list trusted;
+list blacklist;
+
+integer comms_channel = 9974;
+integer rename_channel = 9975;
+integer menu_channel = 9976;
+
+key wearer;
+
+string g_Lock = "UNSECURED";
+string g_UnitName = "Drone 01";
+
+integer OWNER = 100;
+integer SECOWNER = 101;
+integer TRUST = 102;
+integer BLACKLIST = 103;
+integer WEARER = 104;
+
+string headline = "Welcome to B2-R3 Systems";
+string unitid = "This unit's id: ";
+string status = "Unit's status: ";
+string group = "";  // Group URI
+// Example: string group = "secondlife:///app/group/19657888-576f-83e9-2580-7c3da7c0e4ca/about";
+string landmark = ""; // SLURL
+// Example: string landmark = "http://maps.secondlife.com/secondlife/Hippo%20Hollow/128/128/2";
+string g_Chat;
+string g_RecIM;
+string g_Emote;
+string g_SendIM;
+string g_StartIM;
+string g_IMSummary;
+
+string safeword = "RED";
+
+string mainMenuDialog;
+list mainMenuButtons = ["RENAME", "MODULES", "PROGRAMMER", g_Lock, "Close"];
+ 
+string subMenu_01_Dialog = "\nYou are on the MODULES menu.";
+list subMenu_01_Buttons = ["COMMS", "MOVEMENT", "Close", "-Main-"];
+
+string comms_Dialog;
+list comms_Buttons = ["Start IM", "Send IM", "Rec IM", "Emote", "Speak", "-Main-"];
+
+string move_Dialog;
+list move_Buttons = ["Start IM", "Send IM", "Rec IM", "Emote", "Speak", "-Main-"];
+ 
+string subMenu_02_Dialog = "\nYou are on the PROGRAMMERS menu.";
+ list subMenu_02_Buttons = ["ADD", "REMOVE", "Close", "-Main-"];
+ 
+integer dialogChannel;
+integer dialogHandle;
+integer dialogHandle_rename;
+ 
+open_menu(key inputKey, string inputString, list inputList)
+{
+    llSetLinkPrimitiveParamsFast(2, [PRIM_NAME, g_UnitName]);
+    mainMenuDialog = "\n"+headline;
+    mainMenuDialog += "\n"+unitid+g_UnitName;
+    mainMenuDialog += "\n"+status+g_Lock;
+    mainMenuDialog += "\n"+group;
+    mainMenuDialog += "\n"+landmark;
+    mainMenuDialog += "\nSafeword: "+safeword; 
+    llListenRemove(dialogHandle_rename);
+    dialogChannel = menu_channel;
+    dialogHandle = llListen(dialogChannel, "", inputKey, "");
+    llDialog(inputKey, inputString, inputList, dialogChannel);
+    llSetTimerEvent(30.0);
+}
+
+open_comms_menu(key inputKey, string inputString, list inputList)
+{
+    if(g_StartIM == "Allowed" && g_SendIM == "Allowed" && g_RecIM == "Allowed")
+    {
+        g_IMSummary = "All private comms allowed";
+    }
+    if(g_StartIM == "Blocked" && g_SendIM == "Allowed" && g_RecIM == "Allowed")
+    {
+        g_IMSummary = "May not start comms, but may reply.";
+    }
+    if(g_StartIM == "Blocked" && g_SendIM == "Blocked" && g_RecIM == "Allowed")
+    {
+        g_IMSummary = "May not start or reply, but can receive private comms.";
+    }
+    if(g_StartIM == "Blocked" && g_SendIM == "Blocked" && g_RecIM == "Blocked")
+    {
+        g_IMSummary = "All private comms prevented.";
+    }
+    if(g_StartIM == "Allowed" && g_SendIM == "Blocked" && g_RecIM == "Blocked")
+    {
+        g_IMSummary = "May start an IM, but why bother?.";
+    }
+    if(g_StartIM == "Allowed" && g_SendIM == "Allowed" && g_RecIM == "Blocked")
+    {
+        g_IMSummary = "May start and send, but cannot hear responses.";
+    }
+    if(g_StartIM == "Allowed" && g_SendIM == "Blocked" && g_RecIM == "Allowed")
+    {
+        g_IMSummary = "May start and hear comms but cannot respond.";
+    }    
+    comms_Dialog = "\nCurrent drone comms settings:";
+    comms_Dialog += "\n"+g_Chat;
+    comms_Dialog += "\n"+g_IMSummary;
+    comms_Dialog += "\n"+g_Emote;
+    llListenRemove(dialogHandle);
+    dialogChannel = menu_channel;
+    dialogHandle = llListen(dialogChannel, "", inputKey, "");
+    llDialog(inputKey, inputString, inputList, dialogChannel);
+    llSetTimerEvent(30.0);
+}
+ 
+close_menu()
+{
+    llSetTimerEvent(0.0);// you can use 0 as well to save memory
+    llListenRemove(dialogHandle);
+    llListenRemove(dialogHandle_rename);
+}
+
+comms()
+    {
+        llOwnerSay("@redirchat:"+(string)comms_channel+"=add"); 
+        llOwnerSay("@rediremote:"+(string)comms_channel+"=add"); 
+    }
+    
+rename(key id)
+    {
+        llListenRemove(dialogHandle);
+        dialogHandle_rename = llListen(rename_channel, "", id, "");
+        llTextBox(id, "Please enter the drone's new unit id: ", rename_channel);
+        llSetTimerEvent(30.0);
+    }
+ 
+default
+{
+    on_rez(integer start_param)
+    {
+        comms();
+        wearer = llGetOwner();
+    }
+ 
+    touch_start(integer total_number)
+    {
+        key id = llDetectedKey(0);
+        // Ensure any outstanding listener is removed before creating a new one
+        close_menu();
+        open_menu(id, mainMenuDialog, mainMenuButtons);
+    }
+ 
+    listen(integer channel, string name, key id, string message)
+    {
+        if(channel != menu_channel && channel != rename_channel)
+            return;
+ 
+        close_menu();
+        
+        if(channel == rename_channel)
+        {
+            g_UnitName = message;
+            llSetLinkPrimitiveParamsFast(2, [PRIM_NAME, g_UnitName]);
+            close_menu();           
+        } 
+        
+        if(channel == menu_channel)
+        {
+            if(message == "-Main-")
+                open_menu(id, mainMenuDialog, mainMenuButtons);
+            
+            else if(message == "RENAME" )
+                rename(id);
+ 
+            else if(message == "MODULES")
+                open_menu(id, subMenu_01_Dialog, subMenu_01_Buttons);
+ 
+            else if(message == "PROGRAMMER")
+                open_menu(id, subMenu_02_Dialog, subMenu_02_Buttons);
+ 
+            else if (message == "SECURED" || message == "UNSECURED")
+            {
+                if(message == "SECURED" && g_Lock == "UNSECURED")
+                {
+                    llOwnerSay("@detach=n");
+                    g_Lock = "SECURED";
+                }
+                if(message == "UNSECURED" && g_Lock == "SECURED")
+                {
+                    llOwnerSay("@detach=y");
+                    g_Lock = "UNSECURED";
+                }
+                open_menu(id, mainMenuDialog, mainMenuButtons);
+            }
+            else if (message == "COMMS")
+                open_comms_menu(id, comms_Dialog, comms_Buttons);
+            else if (message == "Start IM")
+            {
+                if(g_StartIM == "Blocked")
+                {
+                    llOwnerSay("@startim=y");
+                    g_StartIM="Allowed";
+                }
+                if(g_StartIM == "Allowed")
+                {
+                    llOwnerSay("@startim=n");
+                    g_StartIM="Blocked";
+                }
+                open_comms_menu(id, comms_Dialog, comms_Buttons);
+            }
+            else if (message == "Send IM")
+            {
+                if(g_SendIM == "Blocked")
+                {
+                    llOwnerSay("@sendim=y");
+                    g_SendIM="Allowed";
+                }
+                if(g_SendIM == "Allowed")
+                {
+                    llOwnerSay("@sendim=n");
+                    g_SendIM="Blocked";
+                }
+                open_comms_menu(id, comms_Dialog, comms_Buttons);
+            }
+            else if (message == "Rec IM")
+            {
+                if(g_RecIM == "Blocked")
+                {
+                    llOwnerSay("@recim=y");
+                    g_RecIM="Allowed";
+                }
+                if(g_RecIM == "Allowed")
+                {
+                    llOwnerSay("@recim=n");
+                    g_RecIM="Blocked";
+                }
+                open_comms_menu(id, comms_Dialog, comms_Buttons);
+            }
+        }
+    }
+ 
+    timer()
+    {
+        close_menu();
+    }
+}
